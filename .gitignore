@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Data and Resources
+dummy_data/
+*.zip
+
+# OS
+.DS_Store
+res/QuickShare_*
+res/videos/*/sampled/
