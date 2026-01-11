@@ -1,0 +1,15 @@
+--- Hybrid Federated Learning (9 Sim + 1 Hardware) ---
+Loading and preprocessing data...
+Data Split: 900 Train, 100 Val
+Clients initialized.
+
+============================================================
+Round  | Train Loss   | Val Loss (Ok)   | Val Loss (Bad) 
+============================================================
+Timeout reading weight payload
+1      | 0.040818     | 0.040876        | 0.091614       
+Timeout reading weight payload
+2      | 0.040802     | 0.040860        | 0.090846       
+============================================================
+
+Hybrid Simulation Complete.
