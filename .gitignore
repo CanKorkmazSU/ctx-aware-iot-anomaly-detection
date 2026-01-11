@@ -8,8 +8,16 @@ venv/
 env/
 
 # Data and Resources
+data/
 dummy_data/
+res/videos/
 *.zip
+
+# ESP32
+esp_project/build/
+esp_project/.vscode/
+esp_project/.cache/
+sdkconfig
 
 # OS
 .DS_Store
