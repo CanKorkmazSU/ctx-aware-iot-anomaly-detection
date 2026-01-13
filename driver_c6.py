@@ -8,44 +8,88 @@ import serial
 
 # Protocol Constants
 MAGIC = b'NFL0'
-PAYLOAD_Floats = 25
+PAYLOAD_Floats = 100  # 10x10 grid
 PAYLOAD_BYTES = PAYLOAD_Floats * 4
 
-def preprocess_image(image_path, img_w=360, img_h=240, grid_x=5, grid_y=5):
+# Cache for frame differencing
+_prev_frame_cache = {}
+
+def preprocess_image(image_path, img_w=360, img_h=240, grid_x=10, grid_y=10, use_motion=False):
     """
-    Simulates the C++ preprocessing on the host:
-    - Resize to Target W/H
-    - Split into Grid
-    - Average Pixel Value per Grid Block
-    - Normalize 0-1
+    Extract features for anomaly detection.
+    
+    If use_motion=True (default): Uses frame differencing to capture motion patterns.
+    - Computes absolute difference between current and previous frame
+    - Extracts 5x5 grid features from motion map
+    - Much better for detecting unusual motion (bikes, carts in UCSD)
+    
+    If use_motion=False: Uses static average intensity per grid cell.
     """
     if not os.path.exists(image_path):
         return None
         
-    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE) # Use Grayscale for simple sum
+    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     if img is None:
         return None
         
     img = cv2.resize(img, (img_w, img_h))
     
-    features = []
-    block_w = img_w // grid_x
-    block_h = img_h // grid_y
+    # Get clip/sequence identifier from path (for frame differencing cache)
+    clip_id = os.path.dirname(image_path)
     
-    for gy in range(grid_y):
-        for gx in range(grid_x):
-            start_y = gy * block_h
-            start_x = gx * block_w
-            
-            block = img[start_y:start_y+block_h, start_x:start_x+block_w]
-            avg = np.mean(block)
-            features.append(avg / 255.0)
+    if use_motion:
+        # Motion-based features (frame differencing)
+        if clip_id in _prev_frame_cache:
+            prev = _prev_frame_cache[clip_id]
+            # Absolute difference captures motion
+            diff = cv2.absdiff(img, prev).astype(np.float32)
+        else:
+            # First frame: use zeros (no motion detected yet)
+            diff = np.zeros_like(img, dtype=np.float32)
+        
+        # Update cache with current frame
+        _prev_frame_cache[clip_id] = img.copy()
+        
+        # Apply slight blur to reduce noise
+        diff = cv2.GaussianBlur(diff, (5, 5), 0)
+        
+        # Extract grid features from motion map
+        features = []
+        block_w = img_w // grid_x
+        block_h = img_h // grid_y
+        
+        for gy in range(grid_y):
+            for gx in range(grid_x):
+                start_y = gy * block_h
+                start_x = gx * block_w
+                block = diff[start_y:start_y+block_h, start_x:start_x+block_w]
+                # Normalize motion intensity to 0-1
+                avg_motion = np.mean(block) / 255.0
+                features.append(avg_motion)
+    else:
+        # Static features (original implementation)
+        features = []
+        block_w = img_w // grid_x
+        block_h = img_h // grid_y
+        
+        for gy in range(grid_y):
+            for gx in range(grid_x):
+                start_y = gy * block_h
+                start_x = gx * block_w
+                block = img[start_y:start_y+block_h, start_x:start_x+block_w]
+                avg = np.mean(block)
+                features.append(avg / 255.0)
             
     return features
 
+def reset_motion_cache():
+    """Clear the frame differencing cache (call between clips/sequences)."""
+    global _prev_frame_cache
+    _prev_frame_cache = {}
+
 def send_frame(ser, features):
-    if len(features) != 25:
-        print(f"Error: Expected 25 features, got {len(features)}")
+    if len(features) != PAYLOAD_Floats:
+        print(f"Error: Expected {PAYLOAD_Floats} features, got {len(features)}")
         return
 
     # Packet: MAGIC + LEN (u16_le) + DATA (25 * float32_le)
@@ -96,7 +140,7 @@ def main():
         
         # Fallback to dummy generation for testing loop logic
         print("Using dummy features for testing...")
-        features = [0.5] * 25
+        features = [0.5] * PAYLOAD_Floats
         if ser:
             send_frame(ser, features)
         return
